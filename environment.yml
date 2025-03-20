@@ -17,6 +17,8 @@ dependencies:
   - xgboost >= 2.0.3
   - pmdarima >= 2.0
   - pytorch >= 2.0
+  - cenpy >= 0.9
+  - geopy >= 2.4
   - pip:
       - cinemagoer
       - lxml
