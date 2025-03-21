@@ -9,7 +9,8 @@ dependencies:
   - openpyxl >= 3.0
   - pandas >= 2.0
   - pip >= 24.0
-  - pyarrow 
+  - pyarrow
+  - sentence-transformers 
   - py-xgboost
   - python = 3.12
   - scikit-learn >= 1.4
