@@ -2,9 +2,11 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader, random_split
+from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import numpy as np
+from sklearn.preprocessing import LabelEncoder
 import os
 import argparse
 
@@ -14,12 +16,14 @@ DATA_DIR = os.path.join(os.getcwd(), 'data')
 
 def get_parser():
     parser = argparse.ArgumentParser(description='Minne 2025 RNN Model')
-    parser.add_argument('--lr', default=1e-3, type=float, help='Learning rate for training')
+    parser.add_argument('--lr_max', default=1e-3, type=float, help='max learning rate for training')
+    parser.add_argument('--lr_min', default=1e-4, type=float, help='min learning rate for training')
     parser.add_argument('--n_epochs', default=20, type=int, help='number of epochs to run')
     parser.add_argument('--batch_size', default=8, type=int, help='batch size')
     parser.add_argument('--embed_dim', default=384, type=int, help='embedding dimesion for sentiment analysis')
     parser.add_argument('--hidden_dim', default=128, type=int, help='dimension of hidden layers')
     parser.add_argument('--feature_dim', default=2, type=int, help='additional numeric features')
+    parser.add_argument('--t0', default=10, type=int, help='number of epochs until restart for lr schedule')
     return parser
 
 
@@ -28,6 +32,25 @@ def load_data():
     df = pd.read_csv(DATA_DIR + '/updated_mathclength_sorted_Training.csv', low_memory=False)
     df = df.dropna(subset=['Completion Date', 'Match Support Contact Notes'])
     df['Completion Date'] = pd.to_datetime(df['Completion Date'])
+    static_columns = [
+    'Big Age', 
+    'Big Gender', 
+    'Big Race/Ethnicity',
+    'Little Gender', 
+    'Little Participant: Race/Ethnicity',
+    'Program', 
+    'Program Type',
+    ]
+
+    label_encoders = {}
+    for col in static_columns:
+        if df[col].dtype == 'object':
+            le = LabelEncoder()
+            df[col] = df[col].fillna('UnKnown')
+            df[col] = le.fit_transform(df[col])
+            label_encoders[col] = le
+        else:
+            df[col] = df[col].fillna(df[col].mean())
 
     # Group and sort by Match ID and Completion Date
     grouped = df.groupby('Match ID 18Char')
@@ -37,13 +60,20 @@ def load_data():
     for match_id, group in grouped:
         group_sorted = group.sort_values(by='Completion Date')
         notes_sequence = group_sorted['Match Support Contact Notes'].tolist()
-        # Example of adding numerical features - you can customize this
+        
+        # time dependent features
         avg_match_length = group_sorted['Match Length'].mean()
         num_contacts = len(group_sorted)
+
+        # static features
+        static_values = group_sorted.iloc[0][static_columns].values.astype(float)
+
+        combined_features = [avg_match_length, num_contacts] + static_values.tolist()
         final_match_length = group_sorted['Match Length'].iloc[-1]  # Target is last match length
+
         data.append((notes_sequence, [avg_match_length, num_contacts], final_match_length))
 
-    return data
+    return data, len(static_columns)
 
 # Custom Dataset
 class MatchDataset(Dataset):
@@ -82,40 +112,44 @@ class SentimentRNN(nn.Module):
         combined = torch.cat([hidden[-1], features], dim=1)
         output = self.fc(combined)
         return output.squeeze()
+    
 
 # Training loop
-def train(model, device, optimizer, criterion, loader, lr=1e-3, num_epochs=5):
+def train(model, device, optimizer, criterion, loader, scheduler, epoch):
     model.train()
-    for epoch in range(num_epochs):
-        epoch_loss = 0
-        preds_list = []
-        targets_list = []
-        for padded_seqs, lengths, features, targets in tqdm(loader):
-            padded_seqs, lengths, features, targets = padded_seqs.to(device), lengths.to(device), features.to(device), targets.to(device)
-            optimizer.zero_grad()
-            preds = model(padded_seqs, lengths, features)
-            loss = criterion(preds, targets)
-            loss.backward()
-            optimizer.step()
+    iters = len(loader)
+    epoch_loss = 0
+    preds_list = []
+    targets_list = []
+    for i, (padded_seqs, lengths, features, targets) in tqdm(enumerate(loader)):
+        padded_seqs, lengths, features, targets = padded_seqs.to(device), lengths.to(device), features.to(device), targets.to(device)
+        optimizer.zero_grad()
+        preds = model(padded_seqs, lengths, features)
+        loss = criterion(preds, targets)
+        loss.backward()
+        optimizer.step()
+        scheduler.step(epoch + i/iters)
 
-            epoch_loss += loss.item()
-            preds_list.append(preds.cpu().detach().numpy())
-            targets_list.append(targets.cpu().numpy())
+        epoch_loss += loss.item()
+        preds_list.append(preds.cpu().detach().numpy())
+        targets_list.append(targets.cpu().numpy())
 
         # Calculate RMSE at the end of the epoch
-        preds_all = np.concatenate(preds_list)
-        targets_all = np.concatenate(targets_list)
-        rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2))
+    preds_all = np.concatenate(preds_list)
+    targets_all = np.concatenate(targets_list)
+    rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2))
 
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {epoch_loss / len(loader):.4f}, Train RMSE: {rmse:.4f}")
+    print(f"Epoch {epoch+1}, Train Loss: {epoch_loss / len(loader):.4f}, Train RMSE: {rmse:.4f}")
+    print('epoch={}, learning rate={:.4f}'.format(epoch, optimizer.state_dict()['param_groups'][0]['lr']))
+    return rmse
 
-def test(model, device, loader):
+def test(model, device, loader, epoch):
     # Evaluation on test set
     model.eval()
     preds_list = []
     targets_list = []
     with torch.no_grad():
-        for padded_seqs, lengths, features, targets in loader:
+        for padded_seqs, lengths, features, targets in tqdm(loader):
             padded_seqs, lengths, features, targets = padded_seqs.to(device), lengths.to(device), features.to(device), targets.to(device)
             preds = model(padded_seqs, lengths, features)
             preds_list.append(preds.cpu().numpy())
@@ -124,19 +158,21 @@ def test(model, device, loader):
     preds_all = np.concatenate(preds_list)
     targets_all = np.concatenate(targets_list)
     test_rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2))
-    print(f"Test RMSE: {test_rmse:.4f}")
+    print(f"Epoch {epoch+1}, Test RMSE: {test_rmse:.4f}")
+    return test_rmse
 
 def main():
     parser = get_parser()
     args = parser.parse_args()
 
+    data, n_static = load_data()
+
     # Hyperparameters
     embed_dim = args.embed_dim  # Embedding size of 'all-MiniLM-L6-v2'
     hidden_dim = args.hidden_dim
-    feature_dim = args.feature_dim  # Number of additional numeric features
+    feature_dim = args.feature_dim + n_static # Number of additional numeric features
     batch_size = args.batch_size
 
-    data = load_data()
 
     # Dataset and DataLoader
     dataset = MatchDataset(data)
@@ -149,16 +185,29 @@ def main():
     # Model, Loss, Optimizer
     model = SentimentRNN(embed_dim, hidden_dim, feature_dim)
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr_max)
+    scheduler = CosineAnnealingWarmRestarts(optimizer, T_0=args.t0, eta_min=args.lr_min)
 
     # Run on GPU if available
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = model.to(device)
 
-    train(model, device, optimizer, criterion, train_loader, lr=args.lr, num_epochs=args.n_epochs)
-    test(model, device, test_loader)
+    train_mses = []
+    test_mses = []
 
-    torch.save(model.state_dict(), 'rnn_model_state_dict.pth')
+    for epoch in range(args.n_epochs):
+        train_mse = train(model, device, optimizer, criterion, train_loader, scheduler, epoch)
+        test_mse = test(model, device, test_loader, epoch)
+        train_mses.append(train_mse)
+        test_mses.append(test_mse)
+
+    #train(model, device, optimizer, criterion, train_loader, lr=args.lr, num_epochs=args.n_epochs)
+    #test(model, device, test_loader)
+
+    torch.save(model.state_dict(), 'saved_models/rnn_model_state_dict.pth')
+    if not os.path.isdir('curve'):
+        os.makedir('curve')
+    torch.save({'train_rmse': train_mses, 'test_rmse': test_mses}, os.path.join('curve', 'training_curve'))
 
 if __name__ == "__main__":
     main()
