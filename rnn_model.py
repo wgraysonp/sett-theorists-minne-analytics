@@ -71,7 +71,7 @@ def load_data():
         combined_features = [avg_match_length, num_contacts] + static_values.tolist()
         final_match_length = group_sorted['Match Length'].iloc[-1]  # Target is last match length
 
-        data.append((notes_sequence, [avg_match_length, num_contacts], final_match_length))
+        data.append((notes_sequence, combined_features, final_match_length))
 
     return data, len(static_columns)
 
@@ -121,7 +121,7 @@ def train(model, device, optimizer, criterion, loader, scheduler, epoch):
     epoch_loss = 0
     preds_list = []
     targets_list = []
-    for i, (padded_seqs, lengths, features, targets) in tqdm(enumerate(loader)):
+    for i, (padded_seqs, lengths, features, targets) in enumerate(tqdm(loader)):
         padded_seqs, lengths, features, targets = padded_seqs.to(device), lengths.to(device), features.to(device), targets.to(device)
         optimizer.zero_grad()
         preds = model(padded_seqs, lengths, features)
@@ -149,7 +149,7 @@ def test(model, device, loader, epoch):
     preds_list = []
     targets_list = []
     with torch.no_grad():
-        for padded_seqs, lengths, features, targets in tqdm(loader):
+        for padded_seqs, lengths, features, targets in loader:
             padded_seqs, lengths, features, targets = padded_seqs.to(device), lengths.to(device), features.to(device), targets.to(device)
             preds = model(padded_seqs, lengths, features)
             preds_list.append(preds.cpu().numpy())
