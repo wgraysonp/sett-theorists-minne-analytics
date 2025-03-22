@@ -3,21 +3,21 @@ import os
 from dateutil.relativedelta import relativedelta
 
 
-dir = os.get_cwd()
+dir = os.getcwd()
 
 # Read the data
-df = pd.read_excel(dir + 'Training.xlsx', parse_dates=['Completion Date'], low_memory=False)
+df = pd.read_excel(dir + '/Training.xlsx', parse_dates=['Completion Date'])
 
 # Sort the DataFrame by Match ID and Completion Date
 sorted_df = df.sort_values(by=['Match ID 18Char', 'Completion Date'])
 
 # Save the sorted DataFrame to a new CSV file
-sorted_df.to_csv(dir + 'sorted_Training.csv', index=False)
+sorted_df.to_csv(dir + '/sorted_Training.csv', index=False)
 
-print("Rows have been sorted by Match ID and Completion Date. Output saved to: " + dir + "sorted_Training.csv.")
+print("Rows have been sorted by Match ID and Completion Date. Output saved to: " + dir + "/sorted_Training.csv.")
 
 df = pd.read_csv(
-    dir + "sorted_Training.csv",
+    dir + "/sorted_Training.csv",
     parse_dates=["Completion Date", "Match Activation Date"], low_memory=False
 )
 
@@ -32,6 +32,6 @@ def calculate_months_diff(row):
 df["Match Length"] = df.apply(calculate_months_diff, axis=1)
 
 # Save the updated DataFrame
-df.to_csv(dir + "updated_mathclength_sorted_Training.csv", index=False)
+df.to_csv(dir + "/updated_mathclength_sorted_Training.csv", index=False)
 
-print("Match Length column updated. Output saved to: " + dir +  "updated_mathclength_sorted_Training.csv.")
+print("Match Length column updated. Output saved to: " + dir +  "/updated_mathclength_sorted_Training.csv.")

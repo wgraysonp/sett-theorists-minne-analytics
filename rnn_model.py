@@ -25,7 +25,7 @@ def get_parser():
 
 # Load data
 def load_data():
-    df = pd.read_csv(DATA_DIR + 'updated_mathclength_sorted_Training.csv', low_memory=False)
+    df = pd.read_csv(DATA_DIR + '/updated_mathclength_sorted_Training.csv', low_memory=False)
     df = df.dropna(subset=['Completion Date', 'Match Support Contact Notes'])
     df['Completion Date'] = pd.to_datetime(df['Completion Date'])
 
@@ -99,8 +99,8 @@ def train(model, device, optimizer, criterion, loader, lr=1e-3, num_epochs=5):
             optimizer.step()
 
             epoch_loss += loss.item()
-            preds_list.append(preds.detach().numpy())
-            targets_list.append(targets.numpy())
+            preds_list.append(preds.cpu().detach().numpy())
+            targets_list.append(targets.cpu().numpy())
 
         # Calculate RMSE at the end of the epoch
         preds_all = np.concatenate(preds_list)
@@ -118,8 +118,8 @@ def test(model, device, loader):
         for padded_seqs, lengths, features, targets in loader:
             padded_seqs, lengths, features, targets = padded_seqs.to(device), lengths.to(device), features.to(device), targets.to(device)
             preds = model(padded_seqs, lengths, features)
-            preds_list.append(preds.numpy())
-            targets_list.append(targets.numpy())
+            preds_list.append(preds.cpu().numpy())
+            targets_list.append(targets.cpu().numpy())
 
     preds_all = np.concatenate(preds_list)
     targets_all = np.concatenate(targets_list)
@@ -157,6 +157,8 @@ def main():
 
     train(model, device, optimizer, criterion, train_loader, lr=args.lr, num_epochs=args.n_epochs)
     test(model, device, test_loader)
+
+    torch.save(model.state_dict(), 'rnn_model_state_dict.pth')
 
 if __name__ == "__main__":
     main()
