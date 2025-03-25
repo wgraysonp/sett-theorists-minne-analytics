@@ -9,6 +9,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 import os
 import argparse
+import random
 
 DATA_DIR = os.path.join(os.getcwd(), 'data')
 
@@ -22,7 +23,7 @@ def get_parser():
     parser.add_argument('--batch_size', default=8, type=int, help='batch size')
     parser.add_argument('--embed_dim', default=384, type=int, help='embedding dimesion for sentiment analysis')
     parser.add_argument('--hidden_dim', default=128, type=int, help='dimension of hidden layers')
-    parser.add_argument('--feature_dim', default=2, type=int, help='additional numeric features')
+    parser.add_argument('--feature_dim', default=1, type=int, help='additional numeric features')
     parser.add_argument('--t0', default=10, type=int, help='number of epochs until restart for lr schedule')
     return parser
 
@@ -62,13 +63,13 @@ def load_data():
         notes_sequence = group_sorted['Match Support Contact Notes'].tolist()
         
         # time dependent features
-        avg_match_length = group_sorted['Match Length'].mean()
+        #avg_match_length = group_sorted['Match Length'].mean()
         num_contacts = len(group_sorted)
 
         # static features
         static_values = group_sorted.iloc[0][static_columns].values.astype(float)
 
-        combined_features = [avg_match_length, num_contacts] + static_values.tolist()
+        combined_features = [num_contacts] + static_values.tolist()
         final_match_length = group_sorted['Match Length'].iloc[-1]  # Target is last match length
 
         data.append((notes_sequence, combined_features, final_match_length))
@@ -77,8 +78,9 @@ def load_data():
 
 # Custom Dataset
 class MatchDataset(Dataset):
-    def __init__(self, data):
+    def __init__(self, data, random_drop=False):
         self.data = data
+        self.random_dropo = random_drop
         # Initialize SentenceTransformer model for text embedding
         self.sbert = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -87,6 +89,11 @@ class MatchDataset(Dataset):
 
     def __getitem__(self, idx):
         notes, features, target = self.data[idx]
+        if self.random_drop:
+            total_contacts = len(notes)//2
+            drop_idx = random.choice(list(range(total_contacts//2, total_contacts + 1)))
+            notes = notes[:drop_idx]
+            features[0] = len(notes)
         embeddings = self.sbert.encode(notes)  # Shape: (seq_len, embed_dim)
         features = torch.tensor(features, dtype=torch.float32)
         return torch.tensor(embeddings, dtype=torch.float32), features, torch.tensor(target, dtype=torch.float32)
