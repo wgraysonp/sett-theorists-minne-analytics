@@ -1,6 +1,7 @@
 import pandas as pd
 import torch
 import torch.nn as nn
+import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset, DataLoader, random_split
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from sentence_transformers import SentenceTransformer
@@ -80,7 +81,7 @@ def load_data():
 class MatchDataset(Dataset):
     def __init__(self, data, random_drop=False):
         self.data = data
-        self.random_dropo = random_drop
+        self.random_drop = random_drop
         # Initialize SentenceTransformer model for text embedding
         self.sbert = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -89,10 +90,12 @@ class MatchDataset(Dataset):
 
     def __getitem__(self, idx):
         notes, features, target = self.data[idx]
-        if self.random_drop:
-            total_contacts = len(notes)//2
-            drop_idx = random.choice(list(range(total_contacts//2, total_contacts + 1)))
+        if self.random_drop and len(notes) > 1:
+            total_contacts = len(notes)
+            drop_idx = random.randint(total_contacts//2, total_contacts)
             notes = notes[:drop_idx]
+            #print(len(notes))
+            assert len(notes) > 0, "empty notes"
             features[0] = len(notes)
         embeddings = self.sbert.encode(notes)  # Shape: (seq_len, embed_dim)
         features = torch.tensor(features, dtype=torch.float32)
@@ -182,7 +185,7 @@ def main():
 
 
     # Dataset and DataLoader
-    dataset = MatchDataset(data)
+    dataset = MatchDataset(data, random_drop=True)
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
@@ -198,6 +201,9 @@ def main():
     # Run on GPU if available
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     model = model.to(device)
+    #if device == 'cuda':
+    #    model = torch.nn.DataParallel(model)
+    #    cudnn.benchmark = True
 
     train_mses = []
     test_mses = []
@@ -213,7 +219,7 @@ def main():
 
     torch.save(model.state_dict(), 'saved_models/rnn_model_state_dict.pth')
     if not os.path.isdir('curve'):
-        os.makedir('curve')
+        os.mkdir('curve')
     torch.save({'train_rmse': train_mses, 'test_rmse': test_mses}, os.path.join('curve', 'training_curve'))
 
 if __name__ == "__main__":
