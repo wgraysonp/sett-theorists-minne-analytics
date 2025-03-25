@@ -30,7 +30,7 @@ def get_parser():
 
 
 # Load data
-def load_data():
+def load_data(random_drop=True):
     df = pd.read_csv(DATA_DIR + '/updated_mathclength_sorted_Training.csv', low_memory=False)
     df = df.dropna(subset=['Completion Date', 'Match Support Contact Notes'])
     df['Completion Date'] = pd.to_datetime(df['Completion Date'])
@@ -61,6 +61,11 @@ def load_data():
     data = []
     for match_id, group in grouped:
         group_sorted = group.sort_values(by='Completion Date')
+        final_match_length = group_sorted['Match Length'].iloc[-1] # Target is match length
+        if random_drop and len(group_sorted) > 1:
+            drop_idx = random.randint(len(group_sorted)//2, len(group_sorted))
+            group_sorted = group_sorted.iloc[:drop_idx]
+
         notes_sequence = group_sorted['Match Support Contact Notes'].tolist()
         
         # time dependent features
@@ -71,7 +76,7 @@ def load_data():
         static_values = group_sorted.iloc[0][static_columns].values.astype(float)
 
         combined_features = [num_contacts] + static_values.tolist()
-        final_match_length = group_sorted['Match Length'].iloc[-1]  # Target is last match length
+        #final_match_length = group_sorted['Match Length'].iloc[-1]  # Target is last match length
 
         data.append((notes_sequence, combined_features, final_match_length))
 
@@ -90,13 +95,13 @@ class MatchDataset(Dataset):
 
     def __getitem__(self, idx):
         notes, features, target = self.data[idx]
-        if self.random_drop and len(notes) > 1:
-            total_contacts = len(notes)
-            drop_idx = random.randint(total_contacts//2, total_contacts)
-            notes = notes[:drop_idx]
-            #print(len(notes))
-            assert len(notes) > 0, "empty notes"
-            features[0] = len(notes)
+        #if self.random_drop and len(notes) > 1:
+        #    total_contacts = len(notes)
+        #    drop_idx = random.randint(total_contacts//2, total_contacts)
+        #    notes = notes[:drop_idx]
+        #    #print(len(notes))
+        #    assert len(notes) > 0, "empty notes"
+        #    features[0] = len(notes)
         embeddings = self.sbert.encode(notes)  # Shape: (seq_len, embed_dim)
         features = torch.tensor(features, dtype=torch.float32)
         return torch.tensor(embeddings, dtype=torch.float32), features, torch.tensor(target, dtype=torch.float32)
@@ -175,7 +180,7 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
 
-    data, n_static = load_data()
+    data, n_static = load_data(random_drop=True)
 
     # Hyperparameters
     embed_dim = args.embed_dim  # Embedding size of 'all-MiniLM-L6-v2'
@@ -185,7 +190,7 @@ def main():
 
 
     # Dataset and DataLoader
-    dataset = MatchDataset(data, random_drop=True)
+    dataset = MatchDataset(data)
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
