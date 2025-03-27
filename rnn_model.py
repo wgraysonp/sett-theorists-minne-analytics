@@ -24,7 +24,7 @@ def get_parser():
     parser.add_argument('--batch_size', default=8, type=int, help='batch size')
     parser.add_argument('--embed_dim', default=384, type=int, help='embedding dimesion for sentiment analysis')
     parser.add_argument('--hidden_dim', default=128, type=int, help='dimension of hidden layers')
-    parser.add_argument('--feature_dim', default=1, type=int, help='additional numeric features')
+    parser.add_argument('--feature_dim', default=2, type=int, help='additional numeric features')
     parser.add_argument('--t0', default=10, type=int, help='number of epochs until restart for lr schedule')
     return parser
 
@@ -70,12 +70,13 @@ def load_data(random_drop=True):
         
         # time dependent features
         #avg_match_length = group_sorted['Match Length'].mean()
+        current_match_length = (group_sorted['Completion Date'].iloc[-1] - group_sorted['Completion Date'].iloc[0]).dt.months
         num_contacts = len(group_sorted)
 
         # static features
         static_values = group_sorted.iloc[0][static_columns].values.astype(float)
 
-        combined_features = [num_contacts] + static_values.tolist()
+        combined_features = [num_contacts, current_match_length] + static_values.tolist()
         #final_match_length = group_sorted['Match Length'].iloc[-1]  # Target is last match length
 
         data.append((notes_sequence, combined_features, final_match_length))
