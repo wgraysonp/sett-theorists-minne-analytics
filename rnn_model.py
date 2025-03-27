@@ -70,7 +70,7 @@ def load_data(random_drop=True):
         
         # time dependent features
         #avg_match_length = group_sorted['Match Length'].mean()
-        current_match_length = (group_sorted['Completion Date'].iloc[-1] - group_sorted['Completion Date'].iloc[0]).dt.months
+        current_match_length = (group_sorted['Completion Date'].iloc[-1] - group_sorted['Completion Date'].iloc[0]).days
         num_contacts = len(group_sorted)
 
         # static features
