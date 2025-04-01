@@ -7,7 +7,7 @@ from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 import os
 import argparse
 import random
@@ -43,16 +43,30 @@ def load_data(random_drop=True):
     'Program', 
     'Program Type',
     ]
+    static_features = []
+    cat_cols = [col for col in static_columns if df[col].dtype == 'object']
+    num_cols = [col for col in static_columns if col not in cat_cols]
+    for col in cat_cols:
+        df[col] = df[col].fillna('unknown')
+        encoder = OneHotEncoder(sparse_output=False)
+        cat_encoded = encoder.fit_transform(df[col])
+        df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(), index=df.index)
+        df = pd.concat([df, df_encoded], axis=1).drop(columns=[col], axis=1)
+        static_features = static_features + encoder.get_feature_names_out()
 
-    label_encoders = {}
-    for col in static_columns:
-        if df[col].dtype == 'object':
-            le = LabelEncoder()
-            df[col] = df[col].fillna('UnKnown')
-            df[col] = le.fit_transform(df[col])
-            label_encoders[col] = le
-        else:
-            df[col] = df[col].fillna(df[col].mean())
+    for col in num_cols:
+        df[col] = df[col].fillna(df[col].mean())
+        static_features.append(col)
+
+   # label_encoders = {}
+   # for col in static_columns:
+   #     if df[col].dtype == 'object':
+   #         le = LabelEncoder()
+   #         df[col] = df[col].fillna('UnKnown')
+   #         df[col] = le.fit_transform(df[col])
+   #         label_encoders[col] = le
+   #     else:
+   #         df[col] = df[col].fillna(df[col].mean())
 
     # Group and sort by Match ID and Completion Date
     grouped = df.groupby('Match ID 18Char')
@@ -74,14 +88,14 @@ def load_data(random_drop=True):
         num_contacts = len(group_sorted)
 
         # static features
-        static_values = group_sorted.iloc[0][static_columns].values.astype(float)
+        static_values = group_sorted.iloc[0][static_features].values.astype(float)
 
         combined_features = [num_contacts, current_match_length] + static_values.tolist()
         #final_match_length = group_sorted['Match Length'].iloc[-1]  # Target is last match length
 
         data.append((notes_sequence, combined_features, final_match_length))
 
-    return data, len(static_columns)
+    return data, len(static_features)
 
 # Custom Dataset
 class MatchDataset(Dataset):
