@@ -2,6 +2,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, random_split
 from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
 from sentence_transformers import SentenceTransformer
@@ -48,11 +49,11 @@ def load_data(random_drop=True):
     num_cols = [col for col in static_columns if col not in cat_cols]
     for col in cat_cols:
         df[col] = df[col].fillna('unknown')
-        encoder = OneHotEncoder(sparse_output=False)
-        cat_encoded = encoder.fit_transform(df[col])
-        df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(), index=df.index)
+        encoder = OneHotEncoder(sparse=False)
+        cat_encoded = encoder.fit_transform(df[[col]])
+        df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names(), index=df.index)
         df = pd.concat([df, df_encoded], axis=1).drop(columns=[col], axis=1)
-        static_features = static_features + encoder.get_feature_names_out()
+        static_features = static_features + encoder.get_feature_names().tolist()
 
     for col in num_cols:
         df[col] = df[col].fillna(df[col].mean())
@@ -134,13 +135,16 @@ class SentimentRNN(nn.Module):
     def __init__(self, embed_dim, hidden_dim, feature_dim):
         super(SentimentRNN, self).__init__()
         self.rnn = nn.GRU(embed_dim, hidden_dim, batch_first=True)
-        self.fc = nn.Linear(hidden_dim + feature_dim, 1)
+        self.fc_1 = nn.Linear(hidden_dim + feature_dim, 128)
+        self.fc_2 = nn.Linear(128, 1)
 
     def forward(self, x, lengths, features):
         packed_input = nn.utils.rnn.pack_padded_sequence(x, lengths.cpu(), batch_first=True, enforce_sorted=False)
         packed_output, hidden = self.rnn(packed_input)
         combined = torch.cat([hidden[-1], features], dim=1)
-        output = self.fc(combined)
+        output = self.fc_1(combined)
+        output = F.relu(output)
+        output = self.fc_2(output)
         return output.squeeze()
     
 
@@ -200,8 +204,11 @@ def main():
     # Hyperparameters
     embed_dim = args.embed_dim  # Embedding size of 'all-MiniLM-L6-v2'
     hidden_dim = args.hidden_dim
-    feature_dim = args.feature_dim + n_static # Number of additional numeric features
+    #feature_dim = args.feature_dim #+ n_static # Number of additional numeric features
+    feature_dim = 126 # hard coded this. The number n_static returned by load_data is wrong. Not sure why. 
     batch_size = args.batch_size
+
+    print(feature_dim)
 
 
     # Dataset and DataLoader
