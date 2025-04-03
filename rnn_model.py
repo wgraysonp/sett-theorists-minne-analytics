@@ -173,7 +173,7 @@ def train(model, device, optimizer, criterion, loader, scheduler, epoch):
         # Calculate RMSE at the end of the epoch
     preds_all = np.concatenate(preds_list)
     targets_all = np.concatenate(targets_list)
-    rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2))
+    rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2)/300)
 
     print(f"Epoch {epoch+1}, Train Loss: {epoch_loss / len(loader):.4f}, Train RMSE: {rmse:.4f}")
     print('epoch={}, learning rate={:.4f}'.format(epoch, optimizer.state_dict()['param_groups'][0]['lr']))
@@ -193,7 +193,7 @@ def test(model, device, loader, epoch):
 
     preds_all = np.concatenate(preds_list)
     targets_all = np.concatenate(targets_list)
-    test_rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2))
+    test_rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2)/300)
     print(f"Epoch {epoch+1}, Test RMSE: {test_rmse:.4f}")
     return test_rmse
 
