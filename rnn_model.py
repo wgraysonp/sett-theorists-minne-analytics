@@ -23,7 +23,7 @@ def get_parser():
     parser.add_argument('--lr_min', default=1e-4, type=float, help='min learning rate for training')
     parser.add_argument('--n_epochs', default=20, type=int, help='number of epochs to run')
     parser.add_argument('--batch_size', default=32, type=int, help='batch size')
-    parser.add_argument('--embed_dim', default=384, type=int, help='embedding dimesion for sentiment analysis')
+    parser.add_argument('--embed_dim', default=768, type=int, help='embedding dimesion for sentiment analysis')
     parser.add_argument('--hidden_dim', default=128, type=int, help='dimension of hidden layers')
     parser.add_argument('--feature_dim', default=2, type=int, help='additional numeric features')
     parser.add_argument('--t0', default=10, type=int, help='number of epochs until restart for lr schedule')
@@ -114,7 +114,7 @@ class MatchDataset(Dataset):
         self.data = data
         self.random_drop = random_drop
         # Initialize SentenceTransformer model for text embedding
-        self.sbert = SentenceTransformer('all-MiniLM-L6-v2')
+        self.sbert = SentenceTransformer('all-mpnet-base-v2')
 
     def __len__(self):
         return len(self.data)
@@ -142,10 +142,9 @@ def collate_fn(batch):
 
  #Model definition
 class SentimentRNN(nn.Module):
-    def __init__(self, embed_dim, hidden_dim, feature_dim, dropout_rate=0.3):
+    def __init__(self, embed_dim, hidden_dim, feature_dim):
         super(SentimentRNN, self).__init__()
         self.rnn = nn.GRU(embed_dim, hidden_dim, batch_first=True)
-        self.dropout = nn.Dropout(dropout_rate)
         self.fc_1 = nn.Linear(hidden_dim + feature_dim, 128)
         self.fc_2 = nn.Linear(128, 1)
 
@@ -155,7 +154,6 @@ class SentimentRNN(nn.Module):
         combined = torch.cat([hidden[-1], features], dim=1)
         output = self.fc_1(combined)
         output = F.relu(output)
-        output = self.dropout(output)
         output = self.fc_2(output)
         return output.squeeze()
 
