@@ -49,13 +49,13 @@ def load_data(random_drop=True):
     num_cols = [col for col in static_columns if col not in cat_cols]
     for col in cat_cols:
         df[col] = df[col].fillna('unknown')
-        encoder = OneHotEncoder(sparse=False)
+        encoder = OneHotEncoder(sparse_output=False)
         cat_encoded = encoder.fit_transform(df[[col]])
         #df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names(), index=df.index)
         df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out([col]), index=df.index)
         df = pd.concat([df, df_encoded], axis=1).drop(columns=[col], axis=1)
         #static_features = static_features + encoder.get_feature_names_out().tolist()
-        static_features += feature_names.tolist()
+        static_features += encoder.get_feature_names_out([col]).tolist()
 
     for col in num_cols:
         df[col] = df[col].fillna(df[col].mean())
@@ -173,7 +173,7 @@ def train(model, device, optimizer, criterion, loader, scheduler, epoch):
         # Calculate RMSE at the end of the epoch
     preds_all = np.concatenate(preds_list)
     targets_all = np.concatenate(targets_list)
-    rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2)/300)
+    rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2))
 
     print(f"Epoch {epoch+1}, Train Loss: {epoch_loss / len(loader):.4f}, Train RMSE: {rmse:.4f}")
     print('epoch={}, learning rate={:.4f}'.format(epoch, optimizer.state_dict()['param_groups'][0]['lr']))
@@ -193,7 +193,7 @@ def test(model, device, loader, epoch):
 
     preds_all = np.concatenate(preds_list)
     targets_all = np.concatenate(targets_list)
-    test_rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2)/300)
+    test_rmse = np.sqrt(np.mean((preds_all - targets_all) ** 2))
     print(f"Epoch {epoch+1}, Test RMSE: {test_rmse:.4f}")
     return test_rmse
 
