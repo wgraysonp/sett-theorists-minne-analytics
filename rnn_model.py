@@ -140,11 +140,12 @@ def collate_fn(batch):
     features = torch.stack(features)
     return padded_sequences, torch.tensor(lengths), features, torch.tensor(targets)
 
-# Model definition
+ #Model definition
 class SentimentRNN(nn.Module):
-    def __init__(self, embed_dim, hidden_dim, feature_dim):
+    def __init__(self, embed_dim, hidden_dim, feature_dim, dropout_rate=0.3):
         super(SentimentRNN, self).__init__()
         self.rnn = nn.GRU(embed_dim, hidden_dim, batch_first=True)
+        self.dropout = nn.Dropout(dropout_rate)
         self.fc_1 = nn.Linear(hidden_dim + feature_dim, 128)
         self.fc_2 = nn.Linear(128, 1)
 
@@ -154,9 +155,10 @@ class SentimentRNN(nn.Module):
         combined = torch.cat([hidden[-1], features], dim=1)
         output = self.fc_1(combined)
         output = F.relu(output)
+        output = self.dropout(output)
         output = self.fc_2(output)
         return output.squeeze()
-    
+
 
 # Training loop
 def train(model, device, optimizer, criterion, loader, scheduler, epoch):
