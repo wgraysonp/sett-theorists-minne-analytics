@@ -22,7 +22,7 @@ def get_parser():
     parser.add_argument('--lr_max', default=1e-3, type=float, help='max learning rate for training')
     parser.add_argument('--lr_min', default=1e-4, type=float, help='min learning rate for training')
     parser.add_argument('--n_epochs', default=20, type=int, help='number of epochs to run')
-    parser.add_argument('--batch_size', default=8, type=int, help='batch size')
+    parser.add_argument('--batch_size', default=32, type=int, help='batch size')
     parser.add_argument('--embed_dim', default=384, type=int, help='embedding dimesion for sentiment analysis')
     parser.add_argument('--hidden_dim', default=128, type=int, help='dimension of hidden layers')
     parser.add_argument('--feature_dim', default=2, type=int, help='additional numeric features')
@@ -51,9 +51,11 @@ def load_data(random_drop=True):
         df[col] = df[col].fillna('unknown')
         encoder = OneHotEncoder(sparse=False)
         cat_encoded = encoder.fit_transform(df[[col]])
-        df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names(), index=df.index)
+        #df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names(), index=df.index)
+        df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out([col]), index=df.index)
         df = pd.concat([df, df_encoded], axis=1).drop(columns=[col], axis=1)
-        static_features = static_features + encoder.get_feature_names().tolist()
+        #static_features = static_features + encoder.get_feature_names_out().tolist()
+        static_features += feature_names.tolist()
 
     for col in num_cols:
         df[col] = df[col].fillna(df[col].mean())
@@ -204,8 +206,8 @@ def main():
     # Hyperparameters
     embed_dim = args.embed_dim  # Embedding size of 'all-MiniLM-L6-v2'
     hidden_dim = args.hidden_dim
-    #feature_dim = args.feature_dim #+ n_static # Number of additional numeric features
-    feature_dim = 126 # hard coded this. The number n_static returned by load_data is wrong. Not sure why. 
+    feature_dim = args.feature_dim + n_static # Number of additional numeric features
+    #feature_dim = 126 # hard coded this. The number n_static returned by load_data is wrong. Not sure why. 
     batch_size = args.batch_size
 
     print(feature_dim)
