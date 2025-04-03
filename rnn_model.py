@@ -34,6 +34,10 @@ def get_parser():
 def load_data(random_drop=True):
     df = pd.read_csv(DATA_DIR + '/updated_mathclength_sorted_Training.csv', low_memory=False)
     df = df.dropna(subset=['Completion Date', 'Match Support Contact Notes'])
+    df['Little Birthdate'] = pd.to_datetime(df['Little Birthdate'], errors='coerce')
+    df['Activation Date'] = pd.to_datetime(df['Activation Date'], errors='coerce')
+    df['Little Age'] = (df['Activation Date'] - df['Little Birthdate']).dt.days
+    df['Little Age'] = df['Little Age'].fillna(df['Little Age'].mean())
     df['Completion Date'] = pd.to_datetime(df['Completion Date'])
     static_columns = [
     'Big Age', 
@@ -43,6 +47,10 @@ def load_data(random_drop=True):
     'Little Participant: Race/Ethnicity',
     'Program', 
     'Program Type',
+    'Little Age',
+    'Big Level of Education',
+    'Big Employer',
+    'Big County'    
     ]
     static_features = []
     cat_cols = [col for col in static_columns if df[col].dtype == 'object']
