@@ -23,7 +23,7 @@ def get_parser():
     parser.add_argument('--lr_min', default=1e-4, type=float, help='min learning rate for training')
     parser.add_argument('--n_epochs', default=20, type=int, help='number of epochs to run')
     parser.add_argument('--batch_size', default=32, type=int, help='batch size')
-    parser.add_argument('--embed_dim', default=768, type=int, help='embedding dimesion for sentiment analysis')
+    parser.add_argument('--embed_dim', default=384, type=int, help='embedding dimesion for sentiment analysis')
     parser.add_argument('--hidden_dim', default=128, type=int, help='dimension of hidden layers')
     parser.add_argument('--feature_dim', default=2, type=int, help='additional numeric features')
     parser.add_argument('--t0', default=10, type=int, help='number of epochs until restart for lr schedule')
@@ -34,10 +34,6 @@ def get_parser():
 def load_data(random_drop=True):
     df = pd.read_csv(DATA_DIR + '/updated_mathclength_sorted_Training.csv', low_memory=False)
     df = df.dropna(subset=['Completion Date', 'Match Support Contact Notes'])
-    df['Little Birthdate'] = pd.to_datetime(df['Little Birthdate'], errors='coerce')
-    df['Activation Date'] = pd.to_datetime(df['Activation Date'], errors='coerce')
-    df['Little Age'] = (df['Activation Date'] - df['Little Birthdate']).dt.days
-    df['Little Age'] = df['Little Age'].fillna(df['Little Age'].mean())
     df['Completion Date'] = pd.to_datetime(df['Completion Date'])
     static_columns = [
     'Big Age', 
@@ -47,11 +43,8 @@ def load_data(random_drop=True):
     'Little Participant: Race/Ethnicity',
     'Program', 
     'Program Type',
-    'Little Age',
-    'Big Level of Education',
-    'Big Employer',
-    'Big County'    
     ]
+
     static_features = []
     cat_cols = [col for col in static_columns if df[col].dtype == 'object']
     num_cols = [col for col in static_columns if col not in cat_cols]
@@ -114,20 +107,13 @@ class MatchDataset(Dataset):
         self.data = data
         self.random_drop = random_drop
         # Initialize SentenceTransformer model for text embedding
-        self.sbert = SentenceTransformer('all-mpnet-base-v2')
+        self.sbert = SentenceTransformer('all-MiniLM-L6-v2')
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         notes, features, target = self.data[idx]
-        #if self.random_drop and len(notes) > 1:
-        #    total_contacts = len(notes)
-        #    drop_idx = random.randint(total_contacts//2, total_contacts)
-        #    notes = notes[:drop_idx]
-        #    #print(len(notes))
-        #    assert len(notes) > 0, "empty notes"
-        #    features[0] = len(notes)
         embeddings = self.sbert.encode(notes)  # Shape: (seq_len, embed_dim)
         features = torch.tensor(features, dtype=torch.float32)
         return torch.tensor(embeddings, dtype=torch.float32), features, torch.tensor(target, dtype=torch.float32)
