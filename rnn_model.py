@@ -34,23 +34,31 @@ def get_parser():
 def load_data(random_drop=True):
     df = pd.read_csv(DATA_DIR + '/updated_mathclength_sorted_Training.csv', low_memory=False)
     df = df.dropna(subset=['Completion Date', 'Match Support Contact Notes'])
+    df['Little Birthdate'] = pd.to_datetime(df['Little Birthdate'], errors='coerce')
+    df['Activation Date'] = pd.to_datetime(df['Activation Date'], errors='coerce')
+    df['Little Age'] = (df['Activation Date'] - df['Little Birthdate']).dt.days
+    df['Little Age'] = df['Little Age'].fillna(df['Little Age'].mean())
     df['Completion Date'] = pd.to_datetime(df['Completion Date'])
     static_columns = [
-    'Big Age', 
-    'Big Gender', 
-    'Big Race/Ethnicity',
-    'Little Gender', 
-    'Little Participant: Race/Ethnicity',
-    'Program', 
-    'Program Type',
-    ]
+     'Big Age', 
+     'Big Gender', 
+     'Big Race/Ethnicity',
+     'Little Gender', 
+     'Little Participant: Race/Ethnicity',
+     'Program', 
+     'Program Type',
+     'Little Age',
+     'Big Level of Education',
+     'Big Employer',
+     'Big County'    
+     ]
 
     static_features = []
     cat_cols = [col for col in static_columns if df[col].dtype == 'object']
     num_cols = [col for col in static_columns if col not in cat_cols]
     for col in cat_cols:
         df[col] = df[col].fillna('unknown')
-        encoder = OneHotEncoder(sparse_output=False)
+        encoder = OneHotEncoder(sparse_output=False, min_frequency=5)
         cat_encoded = encoder.fit_transform(df[[col]])
         #df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names(), index=df.index)
         df_encoded = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out([col]), index=df.index)
@@ -240,7 +248,7 @@ def main():
     #train(model, device, optimizer, criterion, train_loader, lr=args.lr, num_epochs=args.n_epochs)
     #test(model, device, test_loader)
 
-    torch.save(model.state_dict(), 'saved_models/rnn_model_state_dict.pth')
+    torch.save(model.state_dict(), 'saved_models/rnn_model_state_dict_v2.pth')
     if not os.path.isdir('curve'):
         os.mkdir('curve')
     torch.save({'train_rmse': train_mses, 'test_rmse': test_mses}, os.path.join('curve', 'training_curve'))
